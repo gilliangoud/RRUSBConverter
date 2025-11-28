@@ -1,16 +1,19 @@
-# RRConverter
+# RRUSBConverter
 
-RRConverter is a tool for converting RaceReady passing data to a format that can be used by simple javascript web applications.
+RRUSBConverter is a tool for connecting to a Race Result USB Timing Box via a serial port and broadcasting passing data to a WebSocket server for use by web applications.
 
-It's written in rust for a small footprint and fast performance.
+It is designed to be lightweight and fast, written in Rust.
 
 ## Features
 
-- Connects automatically to a Rase|Result decoder on the local network
-- hosts a simple websocket server that emits passing data in real time at /ws
-- emits passing data in JSON format
+- Connects to a Race Result USB Timing Box via serial port (e.g., `/dev/tty.usbserial-XXXX`).
+- Handles protocol negotiation and time synchronization.
+- Hosts a simple WebSocket server that emits passing data in real-time at `/ws`.
+- Emits passing data in JSON format compatible with `rrclivelaps`.
 
-## Websocket Data Format
+## WebSocket Data Format
+
+The WebSocket server emits JSON objects with the following structure:
 
 ```json
 {
@@ -34,28 +37,26 @@ It's written in rust for a small footprint and fast performance.
 }
 ```
 
-## Running the sofware
-Download the latest release from the [releases](https://github.com/gillian/rrconverter/releases) page and run it with:
+## Running the Software
+
+Download the latest release from the [releases](https://github.com/gillian/rrusbconverter/releases) page and run it with:
 
 ```sh
-./rrconverter [OPTIONS]
+./rrusbconverter --serial-port <PORT>
 ```
 
 ### Options
 
-- `--ip-range <PREFIX>`: Manually specify the subnet to scan (e.g., `192.168.1.`).
-- `--decoder-ip <IP>`: Connect directly to a specific IP, skipping the scan.
-- `--decoder-port <PORT>`: Use a different port (default: 3601).
+- `--serial-port <PORT>`: **Required**. The serial port path to connect to (e.g., `/dev/tty.usbserial-10`, `/dev/ttyUSB0`, `COM3`).
 
 ## Built on
 
 - [tokio](https://tokio.rs)
+- [tokio-serial](https://docs.rs/tokio-serial)
 - [warp](https://warp.rs)
 - [serde](https://serde.rs)
-- [tokio-util](https://docs.rs/tokio-util)
-- [timing](https://github.com/critrace/timing)
 
-## Dev Building instructions
+## Dev Building Instructions
 
 ```sh
 cargo build --release
@@ -64,7 +65,5 @@ cargo build --release
 ## Dev Usage
 
 ```sh
-cargo run
+cargo run -- --serial-port /dev/tty.usbserial-XXXX
 ```
-
-# RRUSBConverter
