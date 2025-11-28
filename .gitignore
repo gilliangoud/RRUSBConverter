@@ -1,0 +1,15 @@
+# Rust
+/target/
+/Cargo.lock
+
+# IDEs
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor backup files
+*~
+#*#
