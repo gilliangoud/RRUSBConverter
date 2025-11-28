@@ -116,5 +116,4 @@ jobs:
         with:
           tag_name: build-${{ steps.vars.outputs.sha }}
           name: Build ${{ steps.vars.outputs.sha }}
-          prerelease: true
           files: artifacts/**/*
