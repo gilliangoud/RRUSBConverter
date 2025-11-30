@@ -36,14 +36,16 @@ pub enum WsMessage {
 
 pub struct UsbBox {
     port_name: String,
+    poll_interval: u64,
     ref_computer_time: Option<i64>,
     ref_internal_time: Option<u64>,
 }
 
 impl UsbBox {
-    pub fn new(port_name: String) -> Self {
+    pub fn new(port_name: String, poll_interval: u64) -> Self {
         Self { 
             port_name,
+            poll_interval,
             ref_computer_time: None,
             ref_internal_time: None,
         }
@@ -120,13 +122,25 @@ impl UsbBox {
         // Step 4: Get existing passings (just in case)
         framed.send("PASSINGGET;00000000").await?;
 
+        let mut interval = tokio::time::interval(Duration::from_millis(self.poll_interval));
+
         loop {
-            match framed.next().await {
-                Some(Ok(msg)) => {
-                    self.process_message(&msg, tx);
+            tokio::select! {
+                _ = interval.tick() => {
+                    // Request passings periodically
+                    if let Err(e) = framed.send("PASSINGGET;00000000").await {
+                        return Err(Box::new(e));
+                    }
                 }
-                Some(Err(e)) => return Err(Box::new(e)),
-                None => return Err("Connection closed".into()),
+                msg = framed.next() => {
+                    match msg {
+                        Some(Ok(msg)) => {
+                            self.process_message(&msg, tx);
+                        }
+                        Some(Err(e)) => return Err(Box::new(e)),
+                        None => return Err("Connection closed".into()),
+                    }
+                }
             }
         }
     }

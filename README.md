@@ -48,6 +48,7 @@ Download the latest release from the [releases](https://github.com/gillian/rrusb
 ### Options
 
 - `--serial-port <PORT>`: **Required**. The serial port path to connect to (e.g., `/dev/tty.usbserial-10`, `/dev/ttyUSB0`, `COM3`).
+- `--poll-interval <MS>`: Polling interval in milliseconds for requesting passings (default: 500).
 
 ## Built on
 

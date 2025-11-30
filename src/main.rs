@@ -13,6 +13,10 @@ struct Args {
     /// Serial port to connect to (e.g. "/dev/tty.usbserial-XXXX")
     #[arg(long)]
     serial_port: String,
+
+    /// Polling interval in milliseconds for requesting passings
+    #[arg(long, default_value_t = 500)]
+    poll_interval: u64,
 }
 
 #[tokio::main]
@@ -32,7 +36,7 @@ async fn main() {
 
     loop {
         println!("Connecting to USB box at {}...", args.serial_port);
-        let decoder = decoder::UsbBox::new(args.serial_port.clone());
+        let decoder = decoder::UsbBox::new(args.serial_port.clone(), args.poll_interval);
         
         // Run decoder. If it returns, it means it disconnected.
         decoder.run(tx.clone(), is_connected.clone()).await;
