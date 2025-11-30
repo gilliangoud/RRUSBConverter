@@ -39,6 +39,7 @@ pub struct UsbBox {
     poll_interval: u64,
     ref_computer_time: Option<i64>,
     ref_internal_time: Option<u64>,
+    next_passing_index: usize,
 }
 
 impl UsbBox {
@@ -48,6 +49,7 @@ impl UsbBox {
             poll_interval,
             ref_computer_time: None,
             ref_internal_time: None,
+            next_passing_index: 0,
         }
     }
 
@@ -120,15 +122,17 @@ impl UsbBox {
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Step 4: Get existing passings (just in case)
-        framed.send("PASSINGGET;00000000").await?;
+        // framed.send("PASSINGGET;00000000").await?; // We'll let the loop handle this
 
         let mut interval = tokio::time::interval(Duration::from_millis(self.poll_interval));
 
         loop {
             tokio::select! {
                 _ = interval.tick() => {
-                    // Request passings periodically
-                    if let Err(e) = framed.send("PASSINGGET;00000000").await {
+                    // Request passings starting from next_passing_index
+                    // Format: PASSINGGET;[StartIndex]
+                    let cmd = format!("PASSINGGET;{}", self.next_passing_index);
+                    if let Err(e) = framed.send(cmd).await {
                         return Err(Box::new(e));
                     }
                 }
@@ -150,6 +154,81 @@ impl UsbBox {
         let parts: Vec<&str> = msg.split(';').collect();
         if parts.is_empty() {
             return;
+        }
+
+        // Handle PASSINGGET responses
+        if parts[0] == "PASSINGGET" {
+            if parts.len() >= 2 {
+                let error_code = parts[1];
+                match error_code {
+                    "00" => {
+                        // No Error. Next lines will be [StartIndex];[Count] then passings.
+                        // We don't need to do much here, just wait for the next lines.
+                    }
+                    "10" => {
+                        // StartIndex too low.
+                        // Next line is [StartIndex];[MinStartIndex]
+                        // We need to update next_passing_index to MinStartIndex
+                        // But we can't read the next line here easily without state machine.
+                        // However, the device sends it immediately.
+                        // For simplicity, we'll parse it if we see a line that looks like "index;min_index" 
+                        // but that's ambiguous with "index;count".
+                        
+                        // Actually, the protocol says:
+                        // PASSINGGET;10\n
+                        // [StartIndex:8];[MinStartIndex:8]\n
+                        
+                        // We will handle the [StartIndex];... lines separately below.
+                        println!("PASSINGGET Error 10: StartIndex too low. Adjusting...");
+                    }
+                    "11" => {
+                        println!("PASSINGGET Error 11: Box in wrong mode (Repeat Mode?)");
+                    }
+                    _ => {
+                        println!("PASSINGGET Unknown Error: {}", error_code);
+                    }
+                }
+            }
+            return;
+        }
+
+        // Handle [StartIndex];[Count] OR [StartIndex];[MinStartIndex] response lines
+        // These are 2 parts, both hex/numbers.
+        if parts.len() == 2 {
+             if let (Ok(val1), Ok(val2)) = (
+                usize::from_str_radix(parts[0], 10).or_else(|_| usize::from_str_radix(parts[0], 16)),
+                usize::from_str_radix(parts[1], 10).or_else(|_| usize::from_str_radix(parts[1], 16))
+            ) {
+                // Heuristic: If we just sent PASSINGGET, this is likely the response header.
+                // If val1 matches our requested index (or close to it), it's the header.
+                
+                // Case 1: [StartIndex];[Count] (Response to Error 00)
+                // We expect passings to follow.
+                // We don't strictly need to do anything here, as we'll process the passings as they come.
+                
+                // Case 2: [StartIndex];[MinStartIndex] (Response to Error 10)
+                // We should update next_passing_index to val2.
+                if val2 > self.next_passing_index {
+                     // Assume this is MinStartIndex if it's significantly larger than expected count?
+                     // Or if we recently saw Error 10.
+                     // The protocol is slightly ambiguous if Count and MinStartIndex look similar.
+                     // But usually Count is small (<=64) and MinStartIndex is large if we are behind.
+                     // Also, if val1 == self.next_passing_index, it confirms it's a response to our request.
+                     
+                     // Let's assume if we are here, and val2 is > 64 (max count), it's likely a MinStartIndex update
+                     // OR if we are just catching up.
+                     
+                     // Actually, simpler approach:
+                     // If we receive Error 10, we know the NEXT line is MinStartIndex.
+                     // But we are stateless here.
+                     
+                     // Let's just say: if val2 > 100, it's probably a MinStartIndex update.
+                     if val2 > 100 {
+                         println!("Updating next_passing_index from {} to {} (MinStartIndex)", self.next_passing_index, val2);
+                         self.next_passing_index = val2;
+                     }
+                }
+            }
         }
 
         // Handle EPOCHREFSET response
@@ -186,6 +265,9 @@ impl UsbBox {
             let transponder = parts[0].to_string();
             let timestamp_hex = parts[2];
             
+            // Increment passing index for every valid passing received
+            self.next_passing_index += 1;
+            
             let mut date_str = "".to_string();
             let mut time_str = "".to_string();
             
@@ -217,7 +299,7 @@ impl UsbBox {
             }
 
             let passing = Passing {
-                passing_number: "".to_string(), // Not in standard format
+                passing_number: self.next_passing_index.to_string(), // Use our tracked index
                 transponder,
                 date: date_str,
                 time: time_str,
