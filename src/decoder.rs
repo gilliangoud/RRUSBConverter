@@ -133,7 +133,7 @@ impl UsbBox {
                 _ = interval.tick() => {
                     // Request passings starting from next_passing_index
                     // Format: PASSINGGET;[StartIndex]
-                    let cmd = format!("PASSINGGET;{}", self.next_passing_index);
+                    let cmd = format!("PASSINGGET;{:08x}", self.next_passing_index);
                     if let Err(e) = framed.send(cmd).await {
                         return Err(Box::new(e));
                     }
